@@ -1,7 +1,7 @@
 from openpyxl import load_workbook
 import yaml
 import json
-
+from datetime import date, datetime
 
 def load_config(config_file):
     """
@@ -89,7 +89,6 @@ def is_table_header(row):
     return False
 
 
-from datetime import date, datetime
 
 def get_table_context(row):
     """
@@ -118,10 +117,10 @@ def save_to_json(data, output_file):
 
 if __name__ == "__main__":
     # Load configuration
-    config = load_config("config.yaml")
+    config = load_config("config/config.yaml")
     
     # Extract comments
-    excel_file_path = "Worcester Final week Schedule 2024.xlsx"  # Update with your file path
+    excel_file_path = "data/input/Worcester Final week Schedule 2024.xlsx"  # Update with your file path
     sheets = config.get("sheets_to_process", [])
     output_file = config.get("output_file", "processed_comments.json")
     
