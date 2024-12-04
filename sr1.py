@@ -34,6 +34,7 @@ def extract_tables_and_comments(file_path, sheets_to_process):
             current_table_comments = []
 
             for row in worksheet.iter_rows():
+                
                 # Detect table headers (adjust based on your sheet structure)
                 if any(cell.value for cell in row):  # Non-empty row
                     if is_table_header(row):  # Check if the row marks the start of a new table
@@ -71,13 +72,24 @@ def extract_tables_and_comments(file_path, sheets_to_process):
     return all_comments
 
 
+from datetime import date, datetime
+
 def is_table_header(row):
     """
     Determine if a row is a table header based on custom rules.
-    Adjust this function to match the structure of your sheet.
     """
-    return any(cell.value and isinstance(cell.value, str) and "Day" in cell.value for cell in row)
+    for cell in row:
+        if cell.value:
+            # Check if the cell contains a string with "day" or "2024"
+            if isinstance(cell.value, str) and ("day" in cell.value.lower() or "2024" in cell.value.lower()):
+                return True
+            # Check if the cell contains a date
+            elif isinstance(cell.value, (date, datetime)):
+                return True
+    return False
 
+
+from datetime import date, datetime
 
 def get_table_context(row):
     """
@@ -85,8 +97,13 @@ def get_table_context(row):
     Adjust this function to match the structure of your sheet.
     """
     for cell in row:
-        if cell.value and isinstance(cell.value, str):
-            return cell.value
+        if cell.value:
+            # Check if the cell contains a string
+            if isinstance(cell.value, str):
+                return cell.value
+            # Check if the cell contains a date
+            elif isinstance(cell.value, (date, datetime)):
+                return cell.value.strftime("%Y-%m-%d")  # Format the date as needed
     return "Unknown Table"
 
 
