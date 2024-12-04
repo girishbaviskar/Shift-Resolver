@@ -1,0 +1,10 @@
+sheets_to_process:
+  - Dish
+  - Line
+max_shifts_per_week: 5
+max_hours_per_week: 20
+output:
+  comments_file: data/output/processed_comments.json
+  assignments_file: data/output/shift_assignments.json
+input:
+  excel_file: data/input/Worcester Final week Schedule 2024.xlsx
