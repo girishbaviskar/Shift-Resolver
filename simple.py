@@ -1,7 +1,12 @@
 from openpyxl import load_workbook
 from employee import Employee
 from datetime import date, datetime
-
+import logging
+logging.basicConfig(
+    filename="shift_assignment.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 def parse_comments(raw_comment):
     """
     Parses a raw comment string into a list of (comment, commenter) tuples.
@@ -87,12 +92,14 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
         for sheet in sheets_to_analyze:
             if sheet in workbook.sheetnames:
                 worksheet = workbook[sheet]
+                logging.info(f"Starting to process sheet {sheet}")
                 table_header = ""
                 for index, row in enumerate(worksheet.iter_rows()):
                 # for row in worksheet.iter_rows():
                     table_header_temp = get_table_header(row)
                     if table_header_temp:  # Check if the row marks the start of a new table
                         table_header = table_header_temp
+                        logging.info(f"Got new table header {table_header}")
                         continue
                     
                     assign_shift_to = ""
@@ -123,20 +130,18 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                                         assign_shift_to = comment_item[1]
                                         assign_shift_to_tuple = comment_item
                                         break
-                                    #else: 
-                                        # Assuming first_name_cell.value already exists and is a string
-                                        # if first_name_cell.value:  # Check if the cell already has a value
-                                        #     first_name_cell.value += f", {comment_item[1]} doesn't have any dish shift"
-                                        # else:  # If the cell is empty or None
-                                        #     first_name_cell.value = f"{comment_item[1]} doesn't have any dish shift"
-
+                                    else: 
+                                        logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish room shift so moving to next commentor.")
                                 else:
                                     assign_shift_to = comment_item[1]
                                     assign_shift_to_tuple = comment_item
                                     break
+                            else: 
+                                logging.info(f"{first_name_cell} - {comment_item[1]} has commented for someone else so moving on to next person.")
                         if assign_shift_to_tuple:    
                             first_name_cell_comment_final = assign_shift_to_tuple[0]
                         else:
+                            logging.info(f"{first_name_cell} - unassigned because no valid commentator found.")
                             first_name_cell.comment = None
                             continue
                         
@@ -163,7 +168,8 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                                 last_name_cell_comment_final = last_commenter_tuple[0]
                             else:
                                 # Log or handle conflict scenario
-                                print(f"Conflict: cell{first_name_cell} {last_commenter_tuple[1]} commented, but {assign_shift_to} is assigned.")
+                                logging.info(f"{first_name_cell} - Conflict: {last_commenter_tuple[1]} commented, but {assign_shift_to} is assigned.")
+                                
                                 name_parts = assign_shift_to.split()
                                 if len(name_parts) > 1:  # Ensure there's a last name
                                     last_name = name_parts[-1]
@@ -192,9 +198,10 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
         # Save changes to the workbook
         #workbook.save(filename=file_path)
         print("workout processing completed")
-
+        logging.info("Workbook processing completed successfully.")
     except Exception as e:
         print(f"An error occurred: {e}")
+        logging.error(f"An error occurred: {e}")
         for sheet in sheets_to_analyze:
             results[sheet] = f"Error: {str(e)}"
 
@@ -203,5 +210,7 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
 # Example function usage
 file_path = "Worcester Final week Schedule 2024.xlsx"  # Replace with your .xlsx file name
 sheets_to_analyze = ["Dish", "Line"]  # Replace with sheet names to analyze
+#logging.INFO(f"Loading sheet {file_path}")
+#logging.INFO(f"Starting to process these sheets {sheets_to_analyze}")
 shift_assignments = load_and_assign_shift_xlsx(file_path, sheets_to_analyze)
 print(str(shift_assignments))
