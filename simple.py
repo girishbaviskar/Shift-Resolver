@@ -112,15 +112,33 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                         # Parse the comment into tuples
                         processed_comments = parse_comments(raw_comments)
                         assign_shift_to_tuple = ()
-                        # Assign the last commenter to the shift
+                        # Assign the correct last commenter to the shift
                         for comment_item in reversed(processed_comments):
+                            #check if the comment is by the same person.
                             if comment_item[0].lower() in comment_item[1].lower():
-                                assign_shift_to = comment_item[1]
-                                assign_shift_to_tuple = comment_item
-                                break
-                            
-                        first_name_cell_comment_final = assign_shift_to_tuple[0]
-                        
+                                if sheet != "Dish":
+                                    employee_obj = shift_assignments.get(comment_item[1])
+                                    #check dish room shift
+                                    if employee_obj and employee_obj.dish_room_shift_taken:
+                                        assign_shift_to = comment_item[1]
+                                        assign_shift_to_tuple = comment_item
+                                        break
+                                    #else: 
+                                        # Assuming first_name_cell.value already exists and is a string
+                                        # if first_name_cell.value:  # Check if the cell already has a value
+                                        #     first_name_cell.value += f", {comment_item[1]} doesn't have any dish shift"
+                                        # else:  # If the cell is empty or None
+                                        #     first_name_cell.value = f"{comment_item[1]} doesn't have any dish shift"
+
+                                else:
+                                    assign_shift_to = comment_item[1]
+                                    assign_shift_to_tuple = comment_item
+                                    break
+                        if assign_shift_to_tuple:    
+                            first_name_cell_comment_final = assign_shift_to_tuple[0]
+                        else:
+                            first_name_cell.comment = None
+                            continue
                         
                         #process last name cell
                         # Assuming last_name_cell and first_name_cell are defined within the context of your row processing
@@ -154,7 +172,7 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                         first_name_cell.value = first_name_cell_comment_final
                         first_name_cell.comment = None
                         last_name_cell.value = last_name_cell_comment_final
-                        first_name_cell.comment = None
+                        last_name_cell.comment = None
                         # Store the result for the current sheet
                     
 
@@ -172,7 +190,8 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                 results[sheet] = "Sheet not found"
         
         # Save changes to the workbook
-        workbook.save(filename=file_path)
+        #workbook.save(filename=file_path)
+        print("workout processing completed")
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -183,6 +202,6 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
 
 # Example function usage
 file_path = "Worcester Final week Schedule 2024.xlsx"  # Replace with your .xlsx file name
-sheets_to_analyze = ["Dish"]  # Replace with sheet names to analyze
+sheets_to_analyze = ["Dish", "Line"]  # Replace with sheet names to analyze
 shift_assignments = load_and_assign_shift_xlsx(file_path, sheets_to_analyze)
 print(str(shift_assignments))
