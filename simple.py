@@ -20,6 +20,7 @@ def parse_comments(raw_comment):
     if not raw_comment:
         return []
 
+    
     # Split the comments into a list by the delimiter '\n----\n'
     comment_list = raw_comment.split('\n----\n')
     processed_comments = []
@@ -33,6 +34,7 @@ def parse_comments(raw_comment):
         else:
             # If no valid structure, add as "Unknown"
             processed_comments.append((parts[0].strip(), "Unknown"))
+            
 
     return processed_comments
 
@@ -95,7 +97,6 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                 logging.info(f"Starting to process sheet {sheet}")
                 table_header = ""
                 for index, row in enumerate(worksheet.iter_rows()):
-                # for row in worksheet.iter_rows():
                     table_header_temp = get_table_header(row)
                     if table_header_temp:  # Check if the row marks the start of a new table
                         table_header = table_header_temp
@@ -110,6 +111,9 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                         continue
                     if time_cell.value == "Time":
                         continue
+                    if first_name_cell.value:
+                        logging.info(f"{first_name_cell} Value already present so skipping this cell.")
+                        continue
                         # Skip cells that already have a value or are part of a merged range
 
                         #process first name cell
@@ -118,37 +122,53 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                         raw_comments = first_name_cell.comment.text if first_name_cell.comment else None
                         # Parse the comment into tuples
                         processed_comments = parse_comments(raw_comments)
+                        
                         assign_shift_to_tuple = ()
                         # Assign the correct last commenter to the shift
                         for comment_item in reversed(processed_comments):
                             #check if the comment is by the same person.
+                            if comment_item[1] == 'Unknown':
+                                logging.warning(f"{last_name_cell} - There was a problem in resolving this comment please proceed manually.")
+                                continue
                             if comment_item[0].lower() in comment_item[1].lower():
+                                employee_obj = shift_assignments.get(comment_item[1])
                                 if sheet != "Dish":
-                                    employee_obj = shift_assignments.get(comment_item[1])
+                                    
                                     #check dish room shift
                                     if employee_obj and employee_obj.dish_room_shift_taken:
-                                        assign_shift_to = comment_item[1]
-                                        assign_shift_to_tuple = comment_item
-                                        break
+                                        has_conflict = employee_obj.has_conflict(table_header, time_cell)
+                                        if not has_conflict:
+                                            assign_shift_to = comment_item[1]
+                                            assign_shift_to_tuple = comment_item
+                                            break
+                                        else:
+                                            logging.info(f"{first_name_cell} - There was a shift conflict for {comment_item[1]} so moving to next commentor.")
                                     else: 
                                         logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish room shift so moving to next commentor.")
                                 else:
-                                    assign_shift_to = comment_item[1]
-                                    assign_shift_to_tuple = comment_item
-                                    break
+                                    if employee_obj:
+                                        has_conflict = employee_obj.has_conflict(table_header, time_cell)
+                                        if not has_conflict:
+                                            assign_shift_to = comment_item[1]
+                                            assign_shift_to_tuple = comment_item
+                                            break
+                                    else: 
+                                        assign_shift_to = comment_item[1]
+                                        assign_shift_to_tuple = comment_item
+                                        break
                             else: 
                                 logging.info(f"{first_name_cell} - {comment_item[1]} has commented for someone else so moving on to next person.")
                         if assign_shift_to_tuple:    
                             first_name_cell_comment_final = assign_shift_to_tuple[0]
                         else:
-                            logging.info(f"{first_name_cell} - unassigned because no valid commentator found.")
+                            logging.info(f"{first_name_cell} - Unassigned because no valid commentator found.")
                             first_name_cell.comment = None
                             continue
                         
                         #process last name cell
                         # Assuming last_name_cell and first_name_cell are defined within the context of your row processing
                         
-                        if  not last_name_cell.value and not last_name_cell.comment:
+                        if not last_name_cell.value and not last_name_cell.comment:
                             # If last_name_cell doesn't have a comment, extract last name from first_name_cell's processing
                             if assign_shift_to:
                                 # Split the first_name_cell value into parts assuming "FirstName LastName" format
@@ -162,19 +182,25 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                             # If there is a comment in last_name_cell, verify the commenter matches assign_shift_to
                             raw_comments = last_name_cell.comment.text
                             processed_comments = parse_comments(raw_comments)
-                            last_commenter_tuple = processed_comments[-1] if processed_comments else ("No comment", "Unknown")
-                            if last_commenter_tuple[1] == assign_shift_to:
-                                # Valid assignment, proceed
+                            
+                            last_commenter_tuple = processed_comments[-1]
+                            if last_commenter_tuple[1] == "Unknown":
+                                logging.warning(f"{last_name_cell} - There was a problem in resolving last name comment please check manually to verify.")
                                 last_name_cell_comment_final = last_commenter_tuple[0]
-                            else:
-                                # Log or handle conflict scenario
-                                logging.info(f"{first_name_cell} - Conflict: {last_commenter_tuple[1]} commented, but {assign_shift_to} is assigned.")
+                            else: 
                                 
-                                name_parts = assign_shift_to.split()
-                                if len(name_parts) > 1:  # Ensure there's a last name
-                                    last_name = name_parts[-1]
-                                    last_name_cell_comment_final = last_name 
-                                # Update the cell with the last commenter's name
+                                if last_commenter_tuple[1] == assign_shift_to:
+                                    # Valid assignment, proceed
+                                    last_name_cell_comment_final = last_commenter_tuple[0]
+                                else:
+                                    # Log or handle conflict scenario
+                                    logging.info(f"{first_name_cell} - {last_commenter_tuple[1]} commented, but {assign_shift_to} is assigned. Assigning last name of {assign_shift_to}")
+
+                                    name_parts = assign_shift_to.split()
+                                    if len(name_parts) > 1:  # Ensure there's a last name
+                                        last_name = name_parts[-1]
+                                        last_name_cell_comment_final = last_name 
+                                    # Update the cell with the last commenter's name
                         first_name_cell.value = first_name_cell_comment_final
                         first_name_cell.comment = None
                         last_name_cell.value = last_name_cell_comment_final
@@ -187,7 +213,7 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                                 shift_assigned_employee = Employee(assign_shift_to)
                             else: 
                                 shift_assigned_employee = shift_assignments.get(assign_shift_to)
-                            shift_assigned_employee.add_shift(sheet, table_header, time_cell, 3.5)
+                            shift_assigned_employee.add_shift(sheet, table_header, time_cell.value, 3.5)
                             shift_assignments[assign_shift_to] = shift_assigned_employee
                             results[sheet] = assign_shift_to
                     # add to shift assignment object here

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 class Employee:
     def __init__(self, name):
         """
@@ -22,27 +24,49 @@ class Employee:
             time (str): Time range of the shift (e.g., "8:30AM - 12:00PM").
             hours (float): Duration of the shift in hours.
         """
+        time = time.replace(" ", "")
         self.shifts.append({"location": location, "date": date, "time": time})
         self.total_shift_count += 1
         self.total_hours += hours
         if location == "Dish":
             self.dish_room_shift_taken = True
 
-    def has_conflict(self, date, time):
+    def has_conflict(self, date_or_day, time_cell):
         """
         Check if the person has a conflict with a new shift.
+        Overlaps are not allowed, but shifts can be back-to-back.
 
-        Parameters:
-            date (str): Date of the new shift.
-            time (str): Time range of the new shift.
+        Parameters: 
+            date_or_day (str): Date of the new shift.
+            time (str): Time range of the new shift (e.g., "8:30AM - 12:00PM").
 
         Returns:
             bool: True if there is a conflict, False otherwise.
         """
+        # Parse the new shift's start and end times
+        time = time_cell.value
+        time = time.replace(" ", "")
+        try:
+            new_start, new_end = map(
+                lambda t: datetime.strptime(t.strip(), "%I:%M%p"),
+                time.split('-')
+            )
+        except ValueError:
+            raise ValueError(f"{time_cell}Time should be in the format '8:30AM - 12:00PM'")
+        
         for shift in self.shifts:
-            if shift["date"] == date and shift["time"] == time:
-                return True
+            if shift["date"] == date_or_day:
+                # Parse the existing shift's start and end times
+                existing_start, existing_end = map(
+                    lambda t: datetime.strptime(t.strip(), "%I:%M%p"),
+                    shift["time"].split('-')
+                )
+                # Check for overlap
+                if not (new_end <= existing_start or new_start >= existing_end):
+                    return True
+        
         return False
+
 
     def get_summary(self):
         """
