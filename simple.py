@@ -1,9 +1,11 @@
 from openpyxl import load_workbook
 from employee import Employee
 from datetime import date, datetime
-import json
 import logging
+
 max_allowed_shifts = 6
+
+
 logging.basicConfig(
     filename="shift_assignment.log",
     level=logging.INFO,
