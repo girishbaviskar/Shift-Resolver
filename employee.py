@@ -14,7 +14,31 @@ class Employee:
         self.total_shift_count = 0  # Total number of shifts
         self.total_hours = 0.0  # Total hours assigned
 
-    def add_shift(self, location, date, time, hours):
+    @staticmethod
+    def get_hours(time):
+        """
+        Calculate the duration of a shift in hours.
+
+        Parameters:
+            time (str): Time range of the shift (e.g., "8:30AM-12:00PM").
+
+        Returns:
+            float: Duration of the shift in hours.
+        """
+        try:
+            start_str, end_str = time.split('-')
+            start_time = datetime.strptime(start_str, "%I:%M%p")
+            end_time = datetime.strptime(end_str, "%I:%M%p")
+
+            # Calculate the duration in hours
+            duration = (end_time - start_time).total_seconds() / 3600
+            if duration < 0:  # Handle shifts crossing midnight
+                duration += 24
+            return duration
+        except ValueError:
+            raise ValueError("Time should be in the format '8:30AM - 12:00PM'")
+        
+    def add_shift(self, location, date, time):
         """
         Add a shift to the person's schedule.
 
@@ -27,7 +51,7 @@ class Employee:
         time = time.replace(" ", "")
         self.shifts.append({"location": location, "date": date, "time": time})
         self.total_shift_count += 1
-        self.total_hours += hours
+        self.total_hours += self.get_hours(time)
         if location == "Dish":
             self.dish_room_shift_taken = True
 
