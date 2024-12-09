@@ -2,8 +2,12 @@ from openpyxl import load_workbook
 from employee import Employee
 from datetime import date, datetime
 import logging
-
+first_finals_week = ['2024-12-11', '2024-12-12', '2024-12-13', '2024-12-14']
+second_finals_week = ['2024-12-15', '2024-12-16', '2024-12-17', '2024-12-18', '2024-12-19']
 max_allowed_shifts = 6
+first_final_week_max_allowed_shifts = 3
+second_final_week_max_allowed_shifts = 5
+
 
 
 logging.basicConfig(
@@ -78,6 +82,23 @@ def is_merged_cell(cell):
             return True
     return False
 
+def has_more_than_allowed_shifts_in_first_week(employee_obj):
+    return True if employee_obj.first_week_shift_count >= first_final_week_max_allowed_shifts else False
+    
+def has_more_than_allowed_shifts_in_second_week(employee_obj):
+    # return True if employee_obj.total_shift_count > max_allowed_shifts else False
+    return True if employee_obj.second_week_shift_count >= second_final_week_max_allowed_shifts else False
+   
+def get_name_parts(assign_shift_to):
+    name_parts = assign_shift_to.split()
+    if len(name_parts) > 1:  # Ensure there's a last name
+        last_name = name_parts[-1]
+        first_name = ' '.join(name_parts[:-1])  # Join all parts except the last one
+    else:
+        first_name = name_parts[0]  # Only one name provided
+        last_name = ''  # No last name available
+    return first_name, last_name
+
 def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
     """
     Load an .xlsx file, analyze specific sheets, and assign shifts based on the last commenter.
@@ -113,6 +134,8 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                     assign_shift_to = ""
                     first_name_cell_comment_final = ""
                     last_name_cell_comment_final = ""
+                    first_name = ""
+                    last_name = ""
                     if sheet == "Kitchen":
                         time_cell, first_name_cell, last_name_cell = row[2:5]
                     else:
@@ -144,17 +167,20 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                         
                         if comment_item[0].lower() in comment_item[1].lower():
                             employee_obj = shift_assignments.get(comment_item[1])
-                            if sheet == "Dish":
+                            if sheet == "Dish" or sheet == "Pot Room":
                                 if employee_obj:
-                                    has_more_than_allowed_shifts = True if employee_obj.total_shift_count > max_allowed_shifts else False
+                                    if table_header in first_finals_week:
+                                        if has_more_than_allowed_shifts_in_first_week(employee_obj):
+                                            logging.info(f"{first_name_cell} - {employee_obj.name} already has {employee_obj.first_week_shift_count}/{first_final_week_max_allowed_shifts} shifts so moving to next commentor")
+                                            continue
+                                    else: 
+                                        if has_more_than_allowed_shifts_in_second_week(employee_obj):
+                                            logging.info(f"{first_name_cell} - {employee_obj.name} already has  {employee_obj.second_week_shift_count}/{second_final_week_max_allowed_shifts} shifts so moving to next commentor")
+                                            continue
                                     has_conflict = employee_obj.has_conflict(table_header, time_cell)
-                                    if has_more_than_allowed_shifts:
-                                            logging.info(f"{first_name_cell} - {employee_obj.name} already has {max_allowed_shifts} shifts so moving to next commentor")
-                                            continue
-                                        
                                     if has_conflict:
-                                            logging.info(f"{first_name_cell} - There was a shift conflict for {comment_item[1]} so moving to next commentor.")
-                                            continue
+                                        logging.info(f"{first_name_cell} - There was a shift conflict for {comment_item[1]} so moving to next commentor.")
+                                        continue
                                     assign_shift_to = comment_item[1]
                                     assign_shift_to_tuple = comment_item
                                     break
@@ -164,15 +190,20 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                                     break
                             else:
                                 if employee_obj:
-                                    has_more_than_allowed_shifts = True if employee_obj.total_shift_count > max_allowed_shifts else False
+                                    
                                     has_conflict = employee_obj.has_conflict(table_header, time_cell)
-                                    has_dish_shift = employee_obj.dish_room_shift_taken
-                                    if not has_dish_shift:
-                                        logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish room shift so moving to next commentor.")
+                                    has_dish_or_pot_shift = employee_obj.dish_or_pot_shift_taken
+                                    if not has_dish_or_pot_shift:
+                                        logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish or pot room shift so moving to next commentor.")
                                         continue
-                                    if has_more_than_allowed_shifts:
-                                        logging.info(f"{first_name_cell} - {employee_obj.name} already has {max_allowed_shifts} shifts so moving to next commentor")
-                                        continue
+                                    if table_header in first_finals_week:
+                                        if has_more_than_allowed_shifts_in_first_week(employee_obj):
+                                            logging.info(f"{first_name_cell} - {employee_obj.name} already has {employee_obj.first_week_shift_count}/{first_final_week_max_allowed_shifts} shifts so moving to next commentor")
+                                            continue
+                                    else: 
+                                        if has_more_than_allowed_shifts_in_second_week(employee_obj):
+                                            logging.info(f"{first_name_cell} - {employee_obj.name} already has  {employee_obj.second_week_shift_count}/{second_final_week_max_allowed_shifts} shifts so moving to next commentor")
+                                            continue
                                     if has_conflict:
                                         logging.info(f"{first_name_cell} - There was a shift conflict for {comment_item[1]} so moving to next commentor.")
                                         continue
@@ -187,53 +218,18 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                         else: 
                             logging.info(f"{first_name_cell} - {comment_item[1]} has commented for someone else so moving on to next person.")
                     if len(assign_shift_to) > 0:    
-                        first_name_cell_comment_final = assign_shift_to_tuple[0]
+                        first_name, last_name = get_name_parts(assign_shift_to)
                     else:
                         logging.info(f"{first_name_cell} - Unassigned because no valid commentator found.")
                         first_name_cell.comment = None
                         last_name_cell.comment = None
                         continue
                     
-                    #process last name cell
-                    # Assuming last_name_cell and first_name_cell are defined within the context of your row processing
-                    
-                    if not last_name_cell.value and not last_name_cell.comment:
-                        # If last_name_cell doesn't have a comment, extract last name from first_name_cell's processing
-                        if assign_shift_to:
-                            # Split the first_name_cell value into parts assuming "FirstName LastName" format
-                            name_parts = assign_shift_to.split()
-                            if len(name_parts) > 1:  # Ensure there's a last name
-                                last_name = name_parts[-1]
-                                last_name_cell_comment_final = last_name  
-                            else:
-                                last_name_cell_comment_final = "Unknown"  # Handle case where there's no last name
-                    elif not last_name_cell.value and last_name_cell.comment :
-                        # If there is a comment in last_name_cell, verify the commenter matches assign_shift_to
-                        raw_comments = last_name_cell.comment.text
-                        processed_comments = parse_comments(raw_comments)
-                        
-                        last_commenter_tuple = processed_comments[-1]
-                        if last_commenter_tuple[1] == "Unknown":
-                            logging.warning(f"{last_name_cell} - There was a problem in resolving last name comment please check manually to verify.")
-                            last_name_cell_comment_final = last_commenter_tuple[0]
-                        else: 
-                            
-                            if last_commenter_tuple[1] == assign_shift_to:
-                                # Valid assignment, proceed
-                                last_name_cell_comment_final = last_commenter_tuple[0]
-                            else:
-                                # Log or handle conflict scenario
-                                logging.info(f"{first_name_cell} - {last_commenter_tuple[1]} commented, but {assign_shift_to} is assigned. Assigning last name of {assign_shift_to}")
-                                name_parts = assign_shift_to.split()
-                                if len(name_parts) > 1:  # Ensure there's a last name
-                                    last_name = name_parts[-1]
-                                    last_name_cell_comment_final = last_name 
-                                # Update the cell with the last commenter's name
-                    first_name_cell.value = first_name_cell_comment_final
+                    first_name_cell.value = first_name
+                    last_name_cell.value = last_name
                     first_name_cell.comment = None
-                    last_name_cell.value = last_name_cell_comment_final
                     last_name_cell.comment = None
-                    # Store the result for the current sheet
+                    
                 
                     # TODO move this logic up
                     if assign_shift_to_tuple:
@@ -261,7 +257,10 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
 
 # Example function usage
 file_path = "Worcester Final week Schedule 2024.xlsx"  # Replace with your .xlsx file name
-sheets_to_analyze = ["Dish", "Line", "Kitchen", "Pot Room", "Stir Fry", "Sushi","International Kitchen", "Grab & Go", "Salad Room"]  # Replace with sheet names to analyze
+sheets_to_analyze = ["Dish", "Pot Room", "Line", "Kitchen", "Stir Fry", "Sushi","International Kitchen", "Grab & Go", "Salad Room"]  # Replace with sheet names to analyze
+#sheets_to_analyze = ["Dish"]
 shift_assignments = load_and_assign_shift_xlsx(file_path, sheets_to_analyze)
 output_file = "shift_assignments"
+is_this_final_week_schedule = False
+
 print(str(shift_assignments))
