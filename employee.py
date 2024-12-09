@@ -1,5 +1,6 @@
 from datetime import datetime
-
+first_finals_week = ['2024-12-11', '2024-12-12', '2024-12-13', '2024-12-14']
+second_finals_week = ['2024-12-15', '2024-12-16', '2024-12-17', '2024-12-18', '2024-12-19']
 class Employee:
     def __init__(self, name):
         """
@@ -10,8 +11,10 @@ class Employee:
         """
         self.name = name
         self.shifts = []  # List of shifts: [{"location": ..., "date": ..., "time": ...}]
-        self.dish_room_shift_taken = False  # Boolean flag for Dish Room shift
+        self.dish_or_pot_shift_taken = False  # Boolean flag for Dish Room shift
         self.total_shift_count = 0  # Total number of shifts
+        self.first_week_shift_count = 0
+        self.second_week_shift_count = 0
         self.total_hours = 0.0  # Total hours assigned
 
     @staticmethod
@@ -51,9 +54,13 @@ class Employee:
         time = time.replace(" ", "")
         self.shifts.append({"location": location, "date": date, "time": time})
         self.total_shift_count += 1
+        if date in first_finals_week:
+            self.first_week_shift_count += 1
+        elif date in second_finals_week:
+            self.second_week_shift_count += 1
         self.total_hours += self.get_hours(time)
-        if location == "Dish":
-            self.dish_room_shift_taken = True
+        if location == "Dish" or location == "Pot Room":
+            self.dish_or_pot_shift_taken = True
 
     def has_conflict(self, date_or_day, time_cell):
         """
