@@ -1,12 +1,18 @@
+import traceback
 from openpyxl import load_workbook
 from employee import Employee
 from datetime import date, datetime
 import logging
+import re
+
+
 first_finals_week = ['2024-12-11', '2024-12-12', '2024-12-13', '2024-12-14']
 second_finals_week = ['2024-12-15', '2024-12-16', '2024-12-17', '2024-12-18', '2024-12-19']
 max_allowed_shifts = 6
 first_final_week_max_allowed_shifts = 3
 second_final_week_max_allowed_shifts = 5
+resolve_comments_after_assigned = True 
+resolve_comments_after_unassigned = False
 
 
 
@@ -99,6 +105,27 @@ def get_name_parts(assign_shift_to):
         last_name = ''  # No last name available
     return first_name, last_name
 
+
+def is_valid_time_format(time_cell):
+    """
+    Validates if a time_cell string is in the format '11:00AM - 2:30PM'.
+
+    Parameters:
+        time_cell (str): The string to validate.
+
+    Returns:
+        bool: True if the format is valid, False otherwise.
+    """
+    # Remove all spaces from the string
+    cleaned_time_cell = time_cell.replace(" ", "")
+    
+    # Define the regex pattern for the time format
+    pattern = r"^\d{1,2}:\d{2}[APM]{2}-\d{1,2}:\d{2}[APM]{2}$"
+    
+    # Match the pattern
+    return bool(re.match(pattern, cleaned_time_cell))
+
+
 def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
     """
     Load an .xlsx file, analyze specific sheets, and assign shifts based on the last commenter.
@@ -113,7 +140,7 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
     """
     # Initialize result dictionary
     results = {}
-
+    processed_rows_count = 0
     try:
         # Load the workbook
         workbook = load_workbook(filename=file_path, data_only=False)
@@ -132,37 +159,45 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                         continue
                     
                     assign_shift_to = ""
-                    first_name_cell_comment_final = ""
-                    last_name_cell_comment_final = ""
                     first_name = ""
                     last_name = ""
+                    is_unassigned_due_to_warning = False
                     if sheet == "Kitchen":
                         time_cell, first_name_cell, last_name_cell = row[2:5]
                     else:
                         time_cell, first_name_cell, last_name_cell = row[1:4]
+                    
+                    if not time_cell.value:
+                        continue
                     # Skip rows that already have a value or are part of a merged range, or are table header Time-FirstName-LastName
 
                     if is_merged_cell(first_name_cell) or is_merged_cell(last_name_cell):
                         continue
                     if time_cell.value == "Time":
                         continue
-                    if first_name_cell.value:
-                        logging.info(f"{first_name_cell} Value already present so skipping this cell.")
+                    if not first_name_cell.value and not first_name_cell.comment:
                         continue
-                    if not first_name_cell.comment:
+                    if not is_valid_time_format(time_cell.value):
                         continue
-                   
-                    # Get the raw comment
-                    raw_comments = first_name_cell.comment.text
-                    # Parse the comment into tuples
-                    processed_comments = parse_comments(raw_comments)
                     
-                    assign_shift_to_tuple = ()
+                    processed_rows_count += 1
+
+                    # Get the raw comment
+                    if first_name_cell.value:
+                        assign_shift_to = first_name_cell.value + " " + last_name_cell.value
+                        processed_comments= [(first_name_cell.value, assign_shift_to)]
+                    else: 
+                        raw_comments = first_name_cell.comment.text
+                        # Parse the comment into tuples
+                        processed_comments = parse_comments(raw_comments)
+
+            
                     # Assign the correct last commenter to the shift
                     for comment_item in reversed(processed_comments):
                         #check if the comment is by the same person.
                         if comment_item[1] == 'Unknown':
-                            logging.warning(f"{last_name_cell} - There was a problem in resolving this comment please proceed manually.")
+                            is_unassigned_due_to_warning = True
+                            logging.warning(f"{first_name_cell} - There was a problem in resolving this comment please proceed manually.")
                             continue
                         
                         if comment_item[0].lower() in comment_item[1].lower():
@@ -182,20 +217,18 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                                         logging.info(f"{first_name_cell} - There was a shift conflict for {comment_item[1]} so moving to next commentor.")
                                         continue
                                     assign_shift_to = comment_item[1]
-                                    assign_shift_to_tuple = comment_item
                                     break
                                 else: 
                                     assign_shift_to = comment_item[1]
-                                    assign_shift_to_tuple = comment_item
                                     break
                             else:
                                 if employee_obj:
                                     
                                     has_conflict = employee_obj.has_conflict(table_header, time_cell)
                                     has_dish_or_pot_shift = employee_obj.dish_or_pot_shift_taken
-                                    if not has_dish_or_pot_shift:
-                                        logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish or pot room shift so moving to next commentor.")
-                                        continue
+                                    # if not has_dish_or_pot_shift:
+                                    #     logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish or pot room shift so moving to next commentor.")
+                                    #     continue
                                     if table_header in first_finals_week:
                                         if has_more_than_allowed_shifts_in_first_week(employee_obj):
                                             logging.info(f"{first_name_cell} - {employee_obj.name} already has {employee_obj.first_week_shift_count}/{first_final_week_max_allowed_shifts} shifts so moving to next commentor")
@@ -209,49 +242,49 @@ def load_and_assign_shift_xlsx(file_path, sheets_to_analyze):
                                         continue
                                     
                                     assign_shift_to = comment_item[1]
-                                    assign_shift_to_tuple = comment_item
                                     break
                                 else: # if employee_obj not found for non dish shifts that means person doesn't have dish shift yet.
-                                    logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish room shift so moving to next commentor.")
+                                    logging.info(f"{first_name_cell} - {comment_item[1]} doesn't have dish or pot room shift so moving to next commentor.")
                                     continue
                             
                         else: 
                             logging.info(f"{first_name_cell} - {comment_item[1]} has commented for someone else so moving on to next person.")
                     if len(assign_shift_to) > 0:    
                         first_name, last_name = get_name_parts(assign_shift_to)
-                    else:
-                        logging.info(f"{first_name_cell} - Unassigned because no valid commentator found.")
-                        first_name_cell.comment = None
-                        last_name_cell.comment = None
-                        continue
-                    
-                    first_name_cell.value = first_name
-                    last_name_cell.value = last_name
-                    first_name_cell.comment = None
-                    last_name_cell.comment = None
-                    
-                
-                    # TODO move this logic up
-                    if assign_shift_to_tuple:
+                        first_name_cell.value = first_name
+                        last_name_cell.value = last_name
+                        if resolve_comments_after_assigned:
+                            first_name_cell.comment = None
+                            last_name_cell.comment = None
                         if assign_shift_to not in shift_assignments:
                             shift_assigned_employee = Employee(assign_shift_to)
                         else: 
                             shift_assigned_employee = shift_assignments.get(assign_shift_to)
                         shift_assigned_employee.add_shift(sheet, table_header, time_cell.value)
                         shift_assignments[assign_shift_to] = shift_assigned_employee
-                        
-                    # add to shift assignment object here
+                    else:
+                        logging.info(f"{first_name_cell} - Unassigned because no valid commentator found.")
+                        if resolve_comments_after_unassigned and not is_unassigned_due_to_warning:
+                            first_name_cell.comment = None
+                            last_name_cell.comment = None
+                            continue
+                    
+                    
 
         results = shift_assignments
-        # Save changes to the workbook
+        logging.info(f"workout processing completed. Total {processed_rows_count} shifts processed")
+        #Save changes to the workbook
         workbook.save(filename=file_path)
-        print("workout processing completed")
+        
         logging.info("Workbook processing completed successfully.")
     except Exception as e:
-        print(f"An error occurred: {e}")
-        logging.error(f"An error occurred: {e}")
-        for sheet in sheets_to_analyze:
-            results[sheet] = f"Error: {str(e)}"
+    # Log and print the error message with line number
+        error_message = f"An error occurred: {e} | Additional Details: first name={first_name_cell.value} last name = {last_name_cell.value}"
+        logging.error(error_message)
+        
+        # Get the traceback and extract the line number
+        traceback_details = traceback.format_exc()
+        print(f"{error_message}\nTraceback details:\n{traceback_details}")
 
     return results
 
@@ -262,5 +295,3 @@ sheets_to_analyze = ["Dish", "Pot Room", "Line", "Kitchen", "Stir Fry", "Sushi",
 shift_assignments = load_and_assign_shift_xlsx(file_path, sheets_to_analyze)
 output_file = "shift_assignments"
 is_this_final_week_schedule = False
-
-print(str(shift_assignments))
